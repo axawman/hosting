@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--api.insecure=true" # Открываем панель управления Traefik
+      - "--providers.docker=true" # Подключаем Docker как провайдер
+      - "--providers.docker.exposedbydefault=false" # Не выставляем наружу контейнеры без явных меток
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080" # Порт для панели управления Traefik
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - paas_network
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: supersecretpassword
+      POSTGRES_DB: system_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - paas_network
+
+volumes:
+  postgres_data:
+
+networks:
+  paas_network:
+    driver: bridge

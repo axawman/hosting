@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+docker
+sqlalchemy
+psycopg2-binary
+jinja2

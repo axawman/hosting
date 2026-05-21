@@ -38,9 +38,9 @@ def create_student_container(project_name: str, domain: str):
         }
 
         # ВАЖНО: Имя сети зависит от названия папки твоего проекта.
-        # Если папка называется volsu_hosting, Docker Compose назовет сеть volsu_hosting_paas_network
+        # Если папка называется volsu_hosting, Docker Compose назовет сеть hosting
         # Уточни это имя командой `docker network ls` в терминале, если контейнер не запустится.
-        network_name = "volsu_hosting_paas_network"
+        network_name = "hosting_paas_network"
 
         container = client.containers.run(
             image,

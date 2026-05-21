@@ -4,17 +4,32 @@ services:
   traefik:
     image: traefik:v2.10
     command:
-      - "--api.insecure=true" # Открываем панель управления Traefik
-      - "--providers.docker=true" # Подключаем Docker как провайдер
-      - "--providers.docker.exposedbydefault=false" # Не выставляем наружу контейнеры без явных меток
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
     ports:
       - "80:80"
-      - "8080:8080" # Порт для панели управления Traefik
+      - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:
       - paas_network
+
+  # ДОБАВЬТЕ ЭТОТ БЛОК
+  app:
+    build: .
+    volumes:
+      - .:/code
+      - /var/run/docker.sock:/var/run/docker.sock # Нужно для управления другими контейнерами
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://admin:supersecretpassword@db:5432/system_db
+    networks:
+      - paas_network
+    depends_on:
+      - db
 
   db:
     image: postgres:15-alpine
@@ -22,12 +37,10 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: supersecretpassword
       POSTGRES_DB: system_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
     networks:
       - paas_network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:

@@ -65,7 +65,7 @@
                                             <h5 class="card-title">{{ project.name }}</h5>
                                             
                                             {% set project_domain = project.name.replace('student-app-', '') ~ '.localhost' %}
-                                            <a href="http://{{ project_domain }}" target="_blank" class="mb-2 d-block text-decoration-none">
+                                            <a href="/s/{{ project.name }}/" target="_blank" class="mb-2 d-block text-decoration-none">
                                                 🔗 Открыть сайт
                                             </a>
                                             

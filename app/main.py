@@ -39,12 +39,12 @@ async def deploy_project(
 ):
     subdomain = subdomain.lower().strip()
     
-    # 1. Проверки названия поддомена
+    # 1. Проверки названия проекта
     if not subdomain.replace("-", "").isalnum():
-        return RedirectResponse(url="/?error=Имя поддомена может содержать только латинские буквы, цифры и дефис", status_code=303)
+        return RedirectResponse(url="/?error=Имя проекта может содержать только латинские буквы, цифры и дефис", status_code=303)
         
     if not is_subdomain_available(subdomain):
-        return RedirectResponse(url="/?error=Этот поддомен уже занят", status_code=303)
+        return RedirectResponse(url="/?error=Проект с таким именем уже существует", status_code=303)
         
     if not file.filename.endswith('.zip'):
         return RedirectResponse(url="/?error=Загрузите файл в формате ZIP", status_code=303)

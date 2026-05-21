@@ -33,12 +33,12 @@
                             <h5 class="mb-3">Создать новый проект</h5>
                             
                             <div class="mb-3">
-                                <label for="subdomain" class="form-label fw-bold">Имя поддомена</label>
+                                <label for="subdomain" class="form-label fw-bold">Имя проекта</label>
                                 <div class="input-group">
+                                    <span class="input-group-text">localhost/s/</span>
                                     <input type="text" class="form-control" id="subdomain" name="subdomain" required pattern="[a-zA-Z0-9-]+" title="Разрешены только латинские буквы, цифры и дефис" placeholder="my-awesome-site">
-                                    <span class="input-group-text">.localhost</span>
                                 </div>
-                                <div class="form-text">Имя должно быть уникальным (без пробелов).</div>
+                                <div class="form-text">Адрес проекта будет выглядеть так: <strong>localhost/s/my-awesome-site</strong></div>
                             </div>
                             
                             <div class="mb-4">
@@ -64,9 +64,8 @@
                                         <div class="card-body d-flex flex-column">
                                             <h5 class="card-title">{{ project.name }}</h5>
                                             
-                                            {% set project_domain = project.name.replace('student-app-', '') ~ '.localhost' %}
                                             <a href="/s/{{ project.name }}/" target="_blank" class="mb-2 d-block text-decoration-none">
-                                                🔗 Открыть сайт
+                                                🔗 Открыть localhost/s/{{ project.name }}
                                             </a>
                                             
                                             <p class="card-text mb-1 mt-auto">

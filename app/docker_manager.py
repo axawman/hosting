@@ -7,6 +7,7 @@ import shutil
 
 client = docker.from_env()
 NETWORK_NAME = "paas_web_network"
+PLATFORM_SERVICE_CONTAINERS = 3
 
 def get_student_containers():
     try:
@@ -80,9 +81,24 @@ def delete_student_container(container_id: str):
 def ping_docker():
     try:
         client.ping()
-        return {"status": "success", "message": "Docker активен"}
-    except:
-        return {"status": "error", "message": "Docker не найден"}
+        info = client.info()
+        containers_running = max(
+            info.get("ContainersRunning", 0) - PLATFORM_SERVICE_CONTAINERS,
+            0,
+        )
+        return {
+            "status": "success",
+            "message": "Docker активен",
+            "docker_version": info.get("ServerVersion", "неизвестно"),
+            "containers_running": containers_running,
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Docker не найден: {e}",
+            "docker_version": "неизвестно",
+            "containers_running": 0,
+        }
 
 def is_subdomain_available(subdomain: str):
     try:

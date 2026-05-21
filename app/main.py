@@ -27,7 +27,7 @@ async def read_root(request: Request, error: str = None):
             "title": "Панель управления хостингом",
             "docker_status": docker_status,
             "projects": active_projects,
-            "error": error  # Передаем текст ошибки, если она есть
+            "error": error
         }
     )
 
@@ -37,30 +37,33 @@ async def deploy_project(
     subdomain: str = Form(...),
     file: UploadFile = File(...)
 ):
-    # Валидация поддомена
+    subdomain = subdomain.lower().strip()
+    
+    # 1. Проверки названия поддомена
     if not subdomain.replace("-", "").isalnum():
         return RedirectResponse(url="/?error=Имя поддомена может содержать только латинские буквы, цифры и дефис", status_code=303)
         
     if not is_subdomain_available(subdomain):
-        return RedirectResponse(url="/?error=Этот поддомен уже занят другим проектом", status_code=303)
+        return RedirectResponse(url="/?error=Этот поддомен уже занят", status_code=303)
         
     if not file.filename.endswith('.zip'):
-        return RedirectResponse(url="/?error=Неверный формат файла. Пожалуйста, загрузите ZIP архив", status_code=303)
+        return RedirectResponse(url="/?error=Загрузите файл в формате ZIP", status_code=303)
 
-    # Сохраняем загруженный ZIP во временную папку
+    # 2. Сохранение файла
     os.makedirs("/tmp/uploads", exist_ok=True)
     zip_path = f"/tmp/uploads/{subdomain}.zip"
     
-    with open(zip_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    # Запускаем контейнер с распаковкой
-    result = create_student_container(subdomain, zip_path)
+    try:
+        with open(zip_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # 3. Деплой (с валидацией внутри)
+        result = create_student_container(subdomain, zip_path)
+    finally:
+        # 4. Гарантированно удаляем ZIP с сервера после работы
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
     
-    # Удаляем исходный ZIP архив с сервера (он больше не нужен)
-    os.remove(zip_path)
-    
-    # Проверка на ошибки при деплое
     if result["status"] == "error":
         return RedirectResponse(url=f"/?error={result['message']}", status_code=303)
         

@@ -1,18 +1,23 @@
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
-import random
+import os
+import shutil
 
-# ДОБАВИЛИ get_student_containers и delete_student_container в импорт
-from app.docker_manager import ping_docker, create_student_container, get_student_containers, delete_student_container
+from app.docker_manager import (
+    ping_docker, 
+    create_student_container, 
+    get_student_containers, 
+    delete_student_container,
+    is_subdomain_available
+)
 
 app = FastAPI(title="Студенческий Хостинг")
 templates = Jinja2Templates(directory="app/templates")
 
 @app.get("/")
-async def read_root(request: Request):
+async def read_root(request: Request, error: str = None):
     docker_status = ping_docker()
-    # Получаем список проектов
     active_projects = get_student_containers()
     
     return templates.TemplateResponse(
@@ -21,28 +26,46 @@ async def read_root(request: Request):
         context={
             "title": "Панель управления хостингом",
             "docker_status": docker_status,
-            "projects": active_projects # Передаем список в шаблон
+            "projects": active_projects,
+            "error": error  # Передаем текст ошибки, если она есть
         }
     )
 
-# НОВЫЙ ЭНДПОИНТ ДЛЯ СОЗДАНИЯ ПРОЕКТА
-@app.post("/deploy-test")
-async def deploy_test_project(request: Request):
-    project_id = random.randint(1000, 9999)
-    # Генерируем тестовые данные (позже студент будет вводить их сам)
-    project_name = f"test-student-app-{project_id}"
-    # Для теста будем использовать локальный домен, например test.localhost
-    domain = f"test-{project_id}.localhost"
+@app.post("/deploy")
+async def deploy_project(
+    request: Request, 
+    subdomain: str = Form(...),
+    file: UploadFile = File(...)
+):
+    # Валидация поддомена
+    if not subdomain.replace("-", "").isalnum():
+        return RedirectResponse(url="/?error=Имя поддомена может содержать только латинские буквы, цифры и дефис", status_code=303)
+        
+    if not is_subdomain_available(subdomain):
+        return RedirectResponse(url="/?error=Этот поддомен уже занят другим проектом", status_code=303)
+        
+    if not file.filename.endswith('.zip'):
+        return RedirectResponse(url="/?error=Неверный формат файла. Пожалуйста, загрузите ZIP архив", status_code=303)
+
+    # Сохраняем загруженный ZIP во временную папку
+    os.makedirs("/tmp/uploads", exist_ok=True)
+    zip_path = f"/tmp/uploads/{subdomain}.zip"
     
-    # Запускаем контейнер
-    result = create_student_container(project_name, domain)
+    with open(zip_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    # Запускаем контейнер с распаковкой
+    result = create_student_container(subdomain, zip_path)
     
-    # Возвращаем пользователя на главную страницу (пока без вывода логов, просто перезагрузка)
-    # В реальном проекте тут лучше возвращать JSON или выводить сообщение об успехе
-    print(result) # Выведет статус в терминал сервера Uvicorn
+    # Удаляем исходный ZIP архив с сервера (он больше не нужен)
+    os.remove(zip_path)
+    
+    # Проверка на ошибки при деплое
+    if result["status"] == "error":
+        return RedirectResponse(url=f"/?error={result['message']}", status_code=303)
+        
     return RedirectResponse(url="/", status_code=303)
 
-# НОВЫЙ ЭНДПОИНТ ДЛЯ УДАЛЕНИЯ ПРОЕКТА
 @app.post("/delete/{container_id}")
 async def delete_project(container_id: str):
     delete_student_container(container_id)

@@ -14,7 +14,7 @@
                     <div class="card-body py-5">
                         <h1 class="mb-4">🚀 Добро пожаловать!</h1>
                         <p class="lead">Бэкенд на FastAPI успешно запущен, а шаблонизатор Jinja2 работает.</p>
-                        <p class="text-muted">Здесь скоро появится список твоих проектов и кнопка деплоя.</p>
+                        
                         <div class="alert {% if docker_status.status == 'success' %}alert-success{% else %}alert-danger{% endif %} mt-4 text-start">
                             <strong>Статус Docker:</strong> {{ docker_status.message }}
                             {% if docker_status.status == 'success' %}
@@ -22,24 +22,54 @@
                                 <small>Версия: {{ docker_status.docker_version }} | Контейнеров запущено: {{ docker_status.containers_running }}</small>
                             {% endif %}
                         </div>
-                        <form action="/deploy-test" method="POST" class="mt-4">
-                            <button type="submit" class="btn btn-success btn-lg shadow-sm">
-                                🚀 Запустить тестовый сайт
+
+                        {% if error %}
+                        <div class="alert alert-danger mt-3 text-start">
+                            ❌ {{ error }}
+                        </div>
+                        {% endif %}
+
+                        <form action="/deploy" method="POST" enctype="multipart/form-data" class="mt-4 text-start bg-white p-4 border rounded shadow-sm">
+                            <h5 class="mb-3">Создать новый проект</h5>
+                            
+                            <div class="mb-3">
+                                <label for="subdomain" class="form-label fw-bold">Имя поддомена</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="subdomain" name="subdomain" required pattern="[a-zA-Z0-9-]+" title="Разрешены только латинские буквы, цифры и дефис" placeholder="my-awesome-site">
+                                    <span class="input-group-text">.localhost</span>
+                                </div>
+                                <div class="form-text">Имя должно быть уникальным (без пробелов).</div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <label for="file" class="form-label fw-bold">Архив с сайтом (ZIP)</label>
+                                <input class="form-control" type="file" id="file" name="file" accept=".zip" required>
+                                <div class="form-text text-primary">Важно: В корне вашего архива должен лежать файл <strong>index.html</strong></div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-success btn-lg w-100 shadow-sm">
+                                🚀 Загрузить и запустить
                             </button>
                         </form>
-                        <p class="text-muted mt-2"><small>Развернет Nginx с лимитом 128 MB RAM на адресе test.localhost</small></p>
+
                         <hr class="my-5">
 
-                        <h3 class="mb-4 text-start">Твои проекты</h3>
+                        <h3 class="mb-4 text-start">Запущенные проекты</h3>
                                             
                         {% if projects %}
                             <div class="row">
                                 {% for project in projects %}
                                 <div class="col-md-6 mb-3">
-                                    <div class="card border-0 shadow-sm text-start">
-                                        <div class="card-body">
+                                    <div class="card border-0 shadow-sm text-start h-100">
+                                        <div class="card-body d-flex flex-column">
                                             <h5 class="card-title text-primary">{{ project.name }}</h5>
-                                            <p class="card-text mb-1">
+                                            
+                                            {% set project_domain = project.name.replace('student-app-', '') ~ '.localhost' %}
+                                            <a href="http://{{ project_domain }}" target="_blank" class="mb-2 d-block text-decoration-none">
+                                                🔗 Открыть сайт
+                                            </a>
+                                            
+                                            <p class="card-text mb-1 mt-auto">
                                                 Статус: 
                                                 <span class="badge {% if project.status == 'running' %}bg-success{% else %}bg-secondary{% endif %}">
                                                     {{ project.status }}
@@ -47,8 +77,8 @@
                                             </p>
                                             <p class="card-text mb-3"><small class="text-muted">ID: {{ project.id }}</small></p>
                                             
-                                            <form action="/delete/{{ project.id }}" method="POST" onsubmit="return confirm('Точно удалить проект?');">
-                                                <button type="submit" class="btn btn-outline-danger btn-sm">🗑 Удалить</button>
+                                            <form action="/delete/{{ project.id }}" method="POST" onsubmit="return confirm('Вы уверены, что хотите полностью удалить этот проект?');">
+                                                <button type="submit" class="btn btn-outline-danger btn-sm w-100">🗑 Удалить проект</button>
                                             </form>
                                         </div>
                                     </div>
@@ -56,8 +86,8 @@
                                 {% endfor %}
                             </div>
                         {% else %}
-                            <div class="alert alert-secondary" role="alert">
-                                У тебя пока нет запущенных проектов.
+                            <div class="alert alert-secondary text-start" role="alert">
+                                У вас пока нет запущенных проектов.
                             </div>
                         {% endif %}
                     </div>

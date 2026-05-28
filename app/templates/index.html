@@ -7,13 +7,32 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container mt-5">
+    <div class="container mt-5 mb-5">
         <div class="row justify-content-center">
-            <div class="col-md-8 text-center">
+            <div class="col-md-9">
                 <div class="card shadow-sm">
                     <div class="card-body py-5">
-                        <h1 class="mb-4">🚀 Добро пожаловать!</h1>
-                        <p class="lead">Бэкенд на FastAPI успешно запущен, а шаблонизатор Jinja2 работает.</p>
+                        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+                            <div>
+                                <h1 class="mb-2">Панель управления хостингом</h1>
+                                {% if user %}
+                                    <div class="text-muted">
+                                        {{ user.email }}
+                                        {% if user.is_admin %}
+                                            <span class="badge bg-warning text-dark ms-2">Администратор</span>
+                                        {% endif %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-muted">Войдите, чтобы управлять своими проектами.</div>
+                                {% endif %}
+                            </div>
+
+                            {% if user %}
+                                <button class="btn btn-outline-light" type="button" data-bs-toggle="offcanvas" data-bs-target="#settingsPanel" aria-controls="settingsPanel">
+                                    Настройки
+                                </button>
+                            {% endif %}
+                        </div>
                         
                         <div class="alert {% if docker_status.status == 'success' %}alert-success{% else %}alert-danger{% endif %} mt-4 text-start">
                             <strong>Статус Docker:</strong> {{ docker_status.message }}
@@ -25,68 +44,79 @@
 
                         {% if error %}
                         <div class="alert alert-danger mt-3 text-start">
-                            ❌ {{ error }}
+                            {{ error }}
                         </div>
                         {% endif %}
 
-                        <form action="/deploy" method="POST" enctype="multipart/form-data" class="mt-4 text-start p-4 border rounded shadow-sm">
-                            <h5 class="mb-3">Создать новый проект</h5>
-                            
-                            <div class="mb-3">
-                                <label for="subdomain" class="form-label fw-bold">Имя проекта</label>
-                                <div class="input-group">
-                                    <span class="input-group-text">localhost/s/</span>
-                                    <input type="text" class="form-control" id="subdomain" name="subdomain" required pattern="[a-zA-Z0-9-]+" title="Разрешены только латинские буквы, цифры и дефис" placeholder="my-awesome-site">
+                        {% if user %}
+                            <form action="/deploy" method="POST" enctype="multipart/form-data" class="mt-4 text-start p-4 border rounded shadow-sm">
+                                <h5 class="mb-3">Создать новый проект</h5>
+                                
+                                <div class="mb-3">
+                                    <label for="subdomain" class="form-label fw-bold">Имя проекта</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">localhost/s/</span>
+                                        <input type="text" class="form-control" id="subdomain" name="subdomain" required pattern="[a-zA-Z0-9-]+" title="Разрешены только латинские буквы, цифры и дефис" placeholder="my-awesome-site">
+                                    </div>
+                                    <div class="form-text">Адрес проекта будет выглядеть так: <strong>localhost/s/my-awesome-site</strong></div>
                                 </div>
-                                <div class="form-text">Адрес проекта будет выглядеть так: <strong>localhost/s/my-awesome-site</strong></div>
-                            </div>
-                            
-                            <div class="mb-4">
-                                <label for="file" class="form-label fw-bold">Архив с сайтом (ZIP)</label>
-                                <input class="form-control" type="file" id="file" name="file" accept=".zip" required>
-                                <div class="form-text">Важно: В корне вашего архива должен лежать файл <strong>index.html</strong></div>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-success btn-lg w-100 shadow-sm">
-                                🚀 Загрузить и запустить
-                            </button>
-                        </form>
+                                
+                                <div class="mb-4">
+                                    <label for="file" class="form-label fw-bold">Архив с сайтом (ZIP)</label>
+                                    <input class="form-control" type="file" id="file" name="file" accept=".zip" required>
+                                    <div class="form-text">Важно: В корне вашего архива должен лежать файл <strong>index.html</strong></div>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-success btn-lg w-100 shadow-sm">
+                                    Загрузить и запустить
+                                </button>
+                            </form>
 
-                        <hr class="my-5">
+                            <hr class="my-5">
 
-                        <h3 class="mb-4 text-start">Запущенные проекты</h3>
-                                            
-                        {% if projects %}
-                            <div class="row">
-                                {% for project in projects %}
-                                <div class="col-md-6 mb-3">
-                                    <div class="card border-0 shadow-sm text-start h-100">
-                                        <div class="card-body d-flex flex-column">
-                                            <h5 class="card-title">{{ project.name }}</h5>
-                                            
-                                            <a href="/s/{{ project.name }}/" target="_blank" class="mb-2 d-block text-decoration-none">
-                                                🔗 Открыть localhost/s/{{ project.name }}
-                                            </a>
-                                            
-                                            <p class="card-text mb-1 mt-auto">
-                                                Статус: 
-                                                <span class="badge {% if project.status == 'running' %}bg-success{% else %}bg-secondary{% endif %}">
-                                                    {{ project.status }}
-                                                </span>
-                                            </p>
-                                            <p class="card-text mb-3"><small class="text-muted">ID: {{ project.id }}</small></p>
-                                            
-                                            <form action="/delete/{{ project.id }}" method="POST" onsubmit="return confirm('Вы уверены, что хотите полностью удалить этот проект?');">
-                                                <button type="submit" class="btn btn-outline-danger btn-sm w-100">🗑 Удалить проект</button>
-                                            </form>
+                            <h3 class="mb-4 text-start">
+                                {% if user.is_admin %}Все проекты{% else %}Мои проекты{% endif %}
+                            </h3>
+                                                
+                            {% if projects %}
+                                <div class="row">
+                                    {% for project in projects %}
+                                    <div class="col-md-6 mb-3">
+                                        <div class="card border-0 shadow-sm text-start h-100">
+                                            <div class="card-body d-flex flex-column">
+                                                <h5 class="card-title">{{ project.name }}</h5>
+                                                {% if user.is_admin %}
+                                                    <p class="card-text mb-2"><small class="text-muted">Владелец: {{ project.owner_email }}</small></p>
+                                                {% endif %}
+                                                
+                                                <a href="/s/{{ project.name }}/" target="_blank" class="mb-2 d-block text-decoration-none">
+                                                    Открыть localhost/s/{{ project.name }}
+                                                </a>
+                                                
+                                                <p class="card-text mb-1 mt-auto">
+                                                    Статус: 
+                                                    <span class="badge {% if project.status == 'running' %}bg-success{% else %}bg-secondary{% endif %}">
+                                                        {{ project.status }}
+                                                    </span>
+                                                </p>
+                                                <p class="card-text mb-3"><small class="text-muted">ID контейнера: {{ project.container_id }}</small></p>
+                                                
+                                                <form action="/delete/{{ project.id }}" method="POST" onsubmit="return confirm('Вы уверены, что хотите полностью удалить этот проект?');">
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm w-100">Удалить проект</button>
+                                                </form>
+                                            </div>
                                         </div>
                                     </div>
+                                    {% endfor %}
                                 </div>
-                                {% endfor %}
-                            </div>
+                            {% else %}
+                                <div class="alert alert-secondary text-start" role="alert">
+                                    {% if user.is_admin %}Проектов пока нет.{% else %}У вас пока нет запущенных проектов.{% endif %}
+                                </div>
+                            {% endif %}
                         {% else %}
-                            <div class="alert alert-secondary text-start" role="alert">
-                                У вас пока нет запущенных проектов.
+                            <div class="alert alert-secondary text-start mt-4" role="alert">
+                                После входа здесь появятся форма загрузки проекта и список ваших сайтов.
                             </div>
                         {% endif %}
                     </div>
@@ -94,5 +124,69 @@
             </div>
         </div>
     </div>
+
+    {% include "settings.html" %}
+
+    <div class="modal fade" id="authModal" tabindex="-1" aria-labelledby="authModalTitle" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="authModalTitle">Аккаунт</h5>
+                    {% if user %}
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                    {% endif %}
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-pills nav-fill mb-4" id="authTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if auth != 'register' %}active{% endif %}" id="login-tab" data-bs-toggle="pill" data-bs-target="#loginPane" type="button" role="tab" aria-controls="loginPane" aria-selected="{% if auth != 'register' %}true{% else %}false{% endif %}">Войти</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if auth == 'register' %}active{% endif %}" id="register-tab" data-bs-toggle="pill" data-bs-target="#registerPane" type="button" role="tab" aria-controls="registerPane" aria-selected="{% if auth == 'register' %}true{% else %}false{% endif %}">Зарегистрироваться</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <div class="tab-pane fade {% if auth != 'register' %}show active{% endif %}" id="loginPane" role="tabpanel" aria-labelledby="login-tab" tabindex="0">
+                            <form action="/login" method="POST">
+                                <div class="mb-3">
+                                    <label for="login-email" class="form-label">Почта</label>
+                                    <input type="email" class="form-control" id="login-email" name="email" autocomplete="email" required>
+                                </div>
+                                <div class="mb-4">
+                                    <label for="login-password" class="form-label">Пароль</label>
+                                    <input type="password" class="form-control" id="login-password" name="password" autocomplete="current-password" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">Войти</button>
+                            </form>
+                        </div>
+
+                        <div class="tab-pane fade {% if auth == 'register' %}show active{% endif %}" id="registerPane" role="tabpanel" aria-labelledby="register-tab" tabindex="0">
+                            <form action="/register" method="POST">
+                                <div class="mb-3">
+                                    <label for="register-email" class="form-label">Почта</label>
+                                    <input type="email" class="form-control" id="register-email" name="email" autocomplete="email" required>
+                                </div>
+                                <div class="mb-4">
+                                    <label for="register-password" class="form-label">Пароль</label>
+                                    <input type="password" class="form-control" id="register-password" name="password" autocomplete="new-password" minlength="8" required>
+                                    <div class="form-text">Минимум 8 символов.</div>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">Зарегистрироваться</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% if not user or auth %}
+    <script>
+        const authModal = new bootstrap.Modal(document.getElementById('authModal'));
+        authModal.show();
+    </script>
+    {% endif %}
 </body>
 </html>

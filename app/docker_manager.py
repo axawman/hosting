@@ -9,12 +9,15 @@ client = docker.from_env()
 NETWORK_NAME = "paas_web_network"
 PLATFORM_SERVICE_CONTAINERS = 3
 
-def get_student_containers():
+def get_student_containers(project_names=None):
     try:
+        allowed_names = set(project_names) if project_names is not None else None
         containers = client.containers.list(all=True)
         return [
             {"id": c.short_id, "name": c.name.replace("student-app-", ""), "status": c.status} 
-            for c in containers if c.name.startswith("student-app-")
+            for c in containers
+            if c.name.startswith("student-app-")
+            and (allowed_names is None or c.name.replace("student-app-", "") in allowed_names)
         ]
     except:
         return []
@@ -62,7 +65,7 @@ def create_student_container(subdomain: str, zip_path: str):
         # 5. Загрузка файлов
         container.put_archive("/usr/share/nginx/html", tar_stream)
         
-        return {"status": "success", "message": "Сайт готов!"}
+        return {"status": "success", "message": "Сайт готов!", "container_id": container.short_id}
 
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -76,6 +79,13 @@ def delete_student_container(container_id: str):
         c.remove(force=True)
         return True
     except:
+        if not container_id.startswith("student-app-"):
+            try:
+                c = client.containers.get(f"student-app-{container_id}")
+                c.remove(force=True)
+                return True
+            except:
+                return False
         return False
 
 def ping_docker():

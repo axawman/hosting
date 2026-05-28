@@ -7,8 +7,10 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 import os
 import shutil
+import zipfile
 
 from app.db import (
+    AdminSettings,
     Project,
     User,
     UserSession,
@@ -25,6 +27,7 @@ from app.docker_manager import (
     create_student_container, 
     get_student_containers, 
     delete_student_container,
+    set_student_container_state,
     is_subdomain_available
 )
 
@@ -69,6 +72,50 @@ def current_user_from_request(request: Request, db: Session):
     return session.user
 
 
+def admin_required(request: Request, db: Session):
+    user = current_user_from_request(request, db)
+    if not user:
+        return None, redirect_home("Сначала войдите в аккаунт", "login")
+    if not user.is_admin:
+        return None, redirect_home("Недостаточно прав")
+    return user, None
+
+
+def get_admin_settings(db: Session):
+    settings = db.query(AdminSettings).filter(AdminSettings.id == 1).first()
+    if settings:
+        return settings
+
+    settings = AdminSettings(id=1)
+    db.add(settings)
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
+def effective_limits(user: User, settings: AdminSettings):
+    return {
+        "max_projects": user.max_projects or settings.default_max_projects,
+        "disk_limit_mb": user.disk_limit_mb or settings.default_disk_limit_mb,
+        "memory_limit_mb": user.memory_limit_mb or settings.default_memory_limit_mb,
+    }
+
+
+def empty_to_none(value: str, minimum: int = 1):
+    value = value.strip()
+    if not value:
+        return None
+    return max(int(value), minimum)
+
+
+def get_zip_size_mb(zip_path: str):
+    total_bytes = 0
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        for item in archive.infolist():
+            total_bytes += item.file_size
+    return max((total_bytes + 1024 * 1024 - 1) // (1024 * 1024), 1)
+
+
 @app.get("/")
 async def read_root(
     request: Request,
@@ -77,7 +124,9 @@ async def read_root(
     db: Session = Depends(get_db),
 ):
     user = current_user_from_request(request, db)
-    docker_status = ping_docker()
+    docker_status = ping_docker() if user and user.is_admin else None
+    settings = get_admin_settings(db) if user else None
+    users = []
     owned_projects = []
     active_projects = []
 
@@ -97,9 +146,25 @@ async def read_root(
                 "status": docker_projects.get(project.name, {}).get("status", "not found"),
                 "container_id": project.container_id or docker_projects.get(project.name, {}).get("id", ""),
                 "owner_email": project.owner.email,
+                "disk_used_mb": project.disk_used_mb,
+                "memory_limit_mb": project.memory_limit_mb,
             }
             for project in owned_projects
         ]
+
+        if user.is_admin:
+            users = [
+                {
+                    "id": account.id,
+                    "email": account.email,
+                    "is_admin": account.is_admin,
+                    "max_projects": account.max_projects,
+                    "disk_limit_mb": account.disk_limit_mb,
+                    "memory_limit_mb": account.memory_limit_mb,
+                    "project_count": db.query(Project).filter(Project.owner_id == account.id).count(),
+                }
+                for account in db.query(User).order_by(User.created_at.desc()).all()
+            ]
     
     return templates.TemplateResponse(
         request=request,
@@ -109,6 +174,9 @@ async def read_root(
             "docker_status": docker_status,
             "projects": active_projects,
             "user": user,
+            "users": users,
+            "settings": settings,
+            "limits": effective_limits(user, settings) if user and settings else None,
             "error": error,
             "auth": auth,
         }
@@ -197,6 +265,12 @@ async def deploy_project(
     if not file.filename.endswith('.zip'):
         return redirect_home("Загрузите файл в формате ZIP")
 
+    settings = get_admin_settings(db)
+    limits = effective_limits(user, settings)
+    project_count = db.query(Project).filter(Project.owner_id == user.id).count()
+    if not user.is_admin and project_count >= limits["max_projects"]:
+        return redirect_home(f"Достигнут лимит проектов: {limits['max_projects']}")
+
     # 2. Сохранение файла
     os.makedirs("/tmp/uploads", exist_ok=True)
     zip_path = f"/tmp/uploads/{subdomain}.zip"
@@ -204,9 +278,17 @@ async def deploy_project(
     try:
         with open(zip_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+
+        try:
+            disk_used_mb = get_zip_size_mb(zip_path)
+        except zipfile.BadZipFile:
+            return redirect_home("Загрузите корректный ZIP-архив")
+
+        if not user.is_admin and disk_used_mb > limits["disk_limit_mb"]:
+            return redirect_home(f"Архив занимает {disk_used_mb} МБ после распаковки. Лимит: {limits['disk_limit_mb']} МБ")
             
         # 3. Деплой (с валидацией внутри)
-        result = create_student_container(subdomain, zip_path)
+        result = create_student_container(subdomain, zip_path, limits["memory_limit_mb"])
     finally:
         # 4. Гарантированно удаляем ZIP с сервера после работы
         if os.path.exists(zip_path):
@@ -215,7 +297,15 @@ async def deploy_project(
     if result["status"] == "error":
         return redirect_home(result["message"])
 
-    db.add(Project(name=subdomain, container_id=result.get("container_id"), owner_id=user.id))
+    db.add(
+        Project(
+            name=subdomain,
+            container_id=result.get("container_id"),
+            disk_used_mb=disk_used_mb,
+            memory_limit_mb=limits["memory_limit_mb"],
+            owner_id=user.id,
+        )
+    )
     db.commit()
         
     return RedirectResponse(url="/", status_code=303)
@@ -238,4 +328,98 @@ async def delete_project(project_id: int, request: Request, db: Session = Depend
         delete_student_container(project.name)
     db.delete(project)
     db.commit()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/admin/default-limits")
+async def update_default_limits(
+    request: Request,
+    default_max_projects: int = Form(...),
+    default_disk_limit_mb: int = Form(...),
+    default_memory_limit_mb: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    user, redirect = admin_required(request, db)
+    if redirect:
+        return redirect
+
+    settings = get_admin_settings(db)
+    settings.default_max_projects = max(default_max_projects, 1)
+    settings.default_disk_limit_mb = max(default_disk_limit_mb, 1)
+    settings.default_memory_limit_mb = max(default_memory_limit_mb, 32)
+    db.commit()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/limits")
+async def update_user_limits(
+    user_id: int,
+    request: Request,
+    max_projects: str = Form(""),
+    disk_limit_mb: str = Form(""),
+    memory_limit_mb: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user, redirect = admin_required(request, db)
+    if redirect:
+        return redirect
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        return redirect_home("Пользователь не найден")
+
+    try:
+        target_user.max_projects = empty_to_none(max_projects)
+        target_user.disk_limit_mb = empty_to_none(disk_limit_mb)
+        target_user.memory_limit_mb = empty_to_none(memory_limit_mb, 32)
+    except ValueError:
+        return redirect_home("Лимиты должны быть числами")
+    db.commit()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/role")
+async def update_user_role(
+    user_id: int,
+    request: Request,
+    is_admin: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user, redirect = admin_required(request, db)
+    if redirect:
+        return redirect
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        return redirect_home("Пользователь не найден")
+    if target_user.id == user.id:
+        return redirect_home("Нельзя изменить роль текущего администратора")
+
+    target_user.is_admin = is_admin == "on"
+    db.commit()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/admin/projects/{project_id}/{action}")
+async def update_project_state(
+    project_id: int,
+    action: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user, redirect = admin_required(request, db)
+    if redirect:
+        return redirect
+
+    if action not in {"start", "stop", "restart"}:
+        return redirect_home("Неизвестное действие с контейнером")
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return redirect_home("Проект не найден")
+
+    changed = set_student_container_state(project.container_id or project.name, action)
+    if not changed:
+        return redirect_home("Не удалось изменить состояние контейнера")
+
     return RedirectResponse(url="/", status_code=303)

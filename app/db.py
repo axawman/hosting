@@ -3,7 +3,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, create_engine
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 
@@ -25,6 +25,9 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(512), nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
+    max_projects = Column(Integer, nullable=True)
+    disk_limit_mb = Column(Integer, nullable=True)
+    memory_limit_mb = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
@@ -50,14 +53,27 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(80), nullable=False, index=True)
     container_id = Column(String(80), nullable=True, index=True)
+    disk_used_mb = Column(Integer, default=0, nullable=False)
+    memory_limit_mb = Column(Integer, nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     owner = relationship("User", back_populates="projects")
 
 
+class AdminSettings(Base):
+    __tablename__ = "admin_settings"
+
+    id = Column(Integer, primary_key=True)
+    default_max_projects = Column(Integer, default=3, nullable=False)
+    default_disk_limit_mb = Column(Integer, default=100, nullable=False)
+    default_memory_limit_mb = Column(Integer, default=128, nullable=False)
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    ensure_schema_columns()
+    ensure_admin_settings()
     ensure_admin_user()
 
 
@@ -115,6 +131,48 @@ def make_session_token(db, user: User) -> str:
 
 def hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def ensure_schema_columns():
+    inspector = inspect(engine)
+    if "users" in inspector.get_table_names():
+        ensure_columns(
+            "users",
+            {
+                "max_projects": "INTEGER",
+                "disk_limit_mb": "INTEGER",
+                "memory_limit_mb": "INTEGER",
+            },
+        )
+
+    if "projects" in inspector.get_table_names():
+        ensure_columns(
+            "projects",
+            {
+                "disk_used_mb": "INTEGER DEFAULT 0 NOT NULL",
+                "memory_limit_mb": "INTEGER",
+            },
+        )
+
+
+def ensure_columns(table_name: str, columns: dict[str, str]):
+    inspector = inspect(engine)
+    existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+    with engine.begin() as connection:
+        for column_name, definition in columns.items():
+            if column_name not in existing_columns:
+                connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"))
+
+
+def ensure_admin_settings():
+    db = SessionLocal()
+    try:
+        settings = db.query(AdminSettings).filter(AdminSettings.id == 1).first()
+        if not settings:
+            db.add(AdminSettings(id=1))
+            db.commit()
+    finally:
+        db.close()
 
 
 def ensure_admin_user():

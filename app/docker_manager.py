@@ -22,7 +22,7 @@ def get_student_containers(project_names=None):
     except:
         return []
 
-def create_student_container(subdomain: str, zip_path: str):
+def create_student_container(subdomain: str, zip_path: str, memory_limit_mb: int | None = None):
     project_name = f"student-app-{subdomain}"
     temp_dir = f"/tmp/deploy_{subdomain}"
     
@@ -54,12 +54,18 @@ def create_student_container(subdomain: str, zip_path: str):
         tar_stream.seek(0)
 
         # 4. Запуск контейнера
+        run_kwargs = {
+            "name": project_name,
+            "detach": True,
+            "network": NETWORK_NAME,
+            "restart_policy": {"Name": "unless-stopped"},
+        }
+        if memory_limit_mb:
+            run_kwargs["mem_limit"] = f"{memory_limit_mb}m"
+
         container = client.containers.run(
             "nginx:alpine",
-            name=project_name,
-            detach=True,
-            network=NETWORK_NAME,
-            restart_policy={"Name": "unless-stopped"}
+            **run_kwargs,
         )
         
         # 5. Загрузка файлов
@@ -86,6 +92,31 @@ def delete_student_container(container_id: str):
                 return True
             except:
                 return False
+        return False
+
+
+def set_student_container_state(container_id: str, action: str):
+    try:
+        c = client.containers.get(container_id)
+    except:
+        if container_id.startswith("student-app-"):
+            return False
+        try:
+            c = client.containers.get(f"student-app-{container_id}")
+        except:
+            return False
+
+    try:
+        if action == "start":
+            c.start()
+        elif action == "stop":
+            c.stop()
+        elif action == "restart":
+            c.restart()
+        else:
+            return False
+        return True
+    except:
         return False
 
 def ping_docker():

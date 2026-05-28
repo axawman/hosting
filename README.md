@@ -1,5 +1,10 @@
 # Сервис размещения веб-ресурсов в интерсети
 
+<img width="2560" height="1284" alt="Screenshot From 2026-05-28 18-07-06" src="https://github.com/user-attachments/assets/79d65855-d5b3-46be-8ed7-f88c558e9648" />
+<img width="2560" height="1284" alt="Screenshot From 2026-05-28 18-06-51" src="https://github.com/user-attachments/assets/8260d8f4-8cff-4053-8e51-4ddb40e6e24d" />
+<img width="2560" height="1284" alt="Screenshot From 2026-05-28 18-07-00" src="https://github.com/user-attachments/assets/0b2fe133-c9f5-4729-b5b3-a2ffda4f7bbb" />
+
+
 Автоматизированная PaaS-платформа (Platform as a Service), предназначенная для мгновенного развертывания и хостинга пользовательских веб-проектов в изолированной инфраструктуре. Система обеспечивает автоматическое управление контейнеризацией, распределение сетевых ресурсов и мониторинг состояния сервисов.
 
 ## Основные функциональные возможности

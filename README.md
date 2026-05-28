@@ -45,14 +45,13 @@
    git clone https://github.com/axawman/hosting
    cd hosting
    ```
-3. **Настройка переменных окружения .env на основе .env.example (изменив параметры БД, секретный ключ и диапазон портов)**
-   ```bash
-   cp .env.example .env
-   ```
-   отредактировать данные
-4. **Запуск платформы**:
+2. **Запуск платформы**:
    ```bash
    docker compose up -d --build
+   ```
+   ** Остановка **:
+   ```bash
+   docker compose down
    ```
    После запуска сервис доступен по адресу http://localhost
 ## Безопасность и надежность
